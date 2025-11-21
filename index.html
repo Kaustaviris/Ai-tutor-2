@@ -1,0 +1,497 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { Volume2, Play, Pause, Mic, Upload, MessageSquare, Book, TrendingUp, Map, Box, Calculator, Image, FileText, Loader2, CheckCircle } from 'lucide-react';
+
+const LocalAITutor = () => {
+  const [activeModule, setActiveModule] = useState('intro');
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [audioContext, setAudioContext] = useState(null);
+  const [currentExperience, setCurrentExperience] = useState(null);
+  const [isListening, setIsListening] = useState(false);
+  const [aiResponse, setAiResponse] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [chatHistory, setChatHistory] = useState([]);
+  const [userInput, setUserInput] = useState('');
+  const [uploadedFileName, setUploadedFileName] = useState('');
+  
+  const audioCtxRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const recognitionRef = useRef(null);
+
+  // Pre-loaded AI responses for offline demo
+  const knowledgeBase = {
+    'photosynthesis': {
+      response: "Photosynthesis is how plants make food using sunlight. Imagine three zones in spatial audio: Left side represents sunlight (bright, high-pitched tones), center shows the leaf (medium frequency), and right side represents oxygen output (flowing, ascending tones). Water enters from below (low rumbling), and glucose is produced in the center (rich, sustained tone).",
+      audioDemo: 'graph'
+    },
+    'gravity': {
+      response: "Gravity is the force that pulls objects toward each other. In spatial audio: imagine a high tone falling from above to below, getting lower in pitch as it descends. The center point represents Earth, with surrounding tones showing the gravitational field pulling inward from all directions.",
+      audioDemo: 'map'
+    },
+    'pythagorean theorem': {
+      response: "The Pythagorean theorem states a² + b² = c² for right triangles. In spatial audio: the right angle is at center (neutral tone), one side extends left (rising pitch), another extends down (falling pitch), and the hypotenuse connects them diagonally (sweeping tone from left-bottom to right-top).",
+      audioDemo: 'geometry'
+    },
+    'water cycle': {
+      response: "The water cycle has four stages. In spatial audio: Evaporation starts low and rises (ascending pitch from bottom), Condensation happens high above (cloud-like sustained high notes at top), Precipitation falls as rain (descending cascading tones), and Collection pools at ground level (deep, gathered low tones).",
+      audioDemo: 'map'
+    },
+    'fractions': {
+      response: "Fractions represent parts of a whole. Imagine a pie in audio space: The whole is a complete circle of tones around you. 1/2 is represented by tones on the left half only. 1/4 is the front-left quarter. As denominators increase, the audio segments become smaller and more precise.",
+      audioDemo: 'math'
+    },
+    'default': {
+      response: "I understand your question. Let me explain this concept in a way that works with spatial audio. The key elements can be positioned in 3D space: important concepts at center with distinct tones, supporting details positioned around the perimeter, and relationships shown through audio transitions and pitch variations.",
+      audioDemo: 'graph'
+    }
+  };
+
+  useEffect(() => {
+    if (!audioCtxRef.current) {
+      audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+      setAudioContext(audioCtxRef.current);
+    }
+
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      recognitionRef.current = new SpeechRecognition();
+      recognitionRef.current.continuous = false;
+      recognitionRef.current.interimResults = false;
+
+      recognitionRef.current.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        setUserInput(transcript);
+        handleLocalAIQuery(transcript);
+      };
+
+      recognitionRef.current.onend = () => {
+        setIsListening(false);
+      };
+    }
+  }, []);
+
+  const modules = [
+    { id: 'intro', name: 'Introduction', icon: Book, description: 'Welcome guide' },
+    { id: 'graph', name: 'Graph Explorer', icon: TrendingUp, description: 'Data visualization' },
+    { id: 'geometry', name: '3D Geometry', icon: Box, description: 'Shape exploration' },
+    { id: 'map', name: 'Map Navigation', icon: Map, description: 'Spatial navigation' },
+    { id: 'math', name: 'Math Concepts', icon: Calculator, description: 'Equation solving' },
+    { id: 'image', name: 'Image Analysis', icon: Image, description: 'Visual content' },
+    { id: 'document', name: 'Document Reader', icon: FileText, description: 'Text processing' }
+  ];
+
+  const speak = (text) => {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 0.9;
+      utterance.pitch = 1;
+      utterance.volume = 1;
+      window.speechSynthesis.speak(utterance);
+    }
+  };
+
+  const startListening = () => {
+    if (recognitionRef.current) {
+      setIsListening(true);
+      recognitionRef.current.start();
+      speak("I'm listening. What would you like to learn about?");
+    } else {
+      alert("Speech recognition not supported in this browser. Please use Chrome or Edge.");
+    }
+  };
+
+  const stopListening = () => {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      setIsListening(false);
+    }
+  };
+
+  const handleLocalAIQuery = (query) => {
+    setIsProcessing(true);
+    
+    const newMessage = { role: 'user', content: query };
+    const updatedHistory = [...chatHistory, newMessage];
+    setChatHistory(updatedHistory);
+
+    setTimeout(() => {
+      const queryLower = query.toLowerCase();
+      let responseData = knowledgeBase.default;
+
+      for (const [key, value] of Object.entries(knowledgeBase)) {
+        if (queryLower.includes(key)) {
+          responseData = value;
+          break;
+        }
+      }
+
+      setAiResponse(responseData.response);
+      speak(responseData.response);
+      
+      const assistantMessage = { role: 'assistant', content: responseData.response };
+      setChatHistory([...updatedHistory, assistantMessage]);
+      
+      setIsProcessing(false);
+    }, 1000);
+  };
+
+  const handleFileUpload = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    setUploadedFileName(file.name);
+    setIsProcessing(true);
+    speak("Processing your file. Please wait.");
+
+    setTimeout(() => {
+      const fileType = file.type;
+      let description = "";
+
+      if (fileType.startsWith('image/')) {
+        description = `This image appears to be an educational diagram. For spatial audio: The main subject is positioned at center with a sustained mid-frequency tone. Supporting elements are arranged around the perimeter with distinct pitches. Labels can be read by moving through the space from left to right. Visual connections are represented by smooth audio transitions between positions. Colors translate to different timbres - warm colors use rich tones, cool colors use clear tones.`;
+      } else if (fileType === 'application/pdf') {
+        description = `This document contains educational content. In spatial audio representation: Headings appear at the top with higher pitches, body text flows from left to right with medium tones, and important points are emphasized with louder volumes. Page numbers position at the bottom. Diagrams and figures are announced with distinct audio cues before their spatial audio description begins.`;
+      } else {
+        description = "File type recognized. This content can be converted into spatial audio format with appropriate positioning and tone mapping.";
+      }
+
+      setAiResponse(description);
+      speak(description);
+      
+      setChatHistory([
+        ...chatHistory,
+        { role: 'user', content: `[Uploaded: ${file.name}]` },
+        { role: 'assistant', content: description }
+      ]);
+
+      setIsProcessing(false);
+    }, 2000);
+  };
+
+  const createSpatialTone = (frequency, pan, duration = 0.5, volume = 0.3) => {
+    if (!audioCtxRef.current) return;
+
+    const ctx = audioCtxRef.current;
+    const oscillator = ctx.createOscillator();
+    const gainNode = ctx.createGain();
+    const panner = ctx.createStereoPanner();
+
+    oscillator.connect(gainNode);
+    gainNode.connect(panner);
+    panner.connect(ctx.destination);
+
+    oscillator.frequency.value = frequency;
+    panner.pan.value = pan;
+    gainNode.gain.value = volume;
+
+    oscillator.start(ctx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
+    oscillator.stop(ctx.currentTime + duration);
+  };
+
+  const playGraphExperience = () => {
+    if (!audioCtxRef.current) return;
+    
+    setIsPlaying(true);
+    speak("Exploring a line graph. Listen as values increase from left to right and bottom to top.");
+    
+    setTimeout(() => {
+      const dataPoints = [
+        { x: 0, y: 2 }, { x: 1, y: 4 }, { x: 2, y: 6 }, { x: 3, y: 8 }, { x: 4, y: 10 }
+      ];
+
+      dataPoints.forEach((point, index) => {
+        setTimeout(() => {
+          const pan = (point.x / 4) * 2 - 1;
+          const freq = 200 + (point.y * 50);
+          createSpatialTone(freq, pan, 0.4, 0.3);
+          setCurrentExperience(`Point ${index + 1}: X=${point.x}, Y=${point.y}`);
+        }, index * 800);
+      });
+
+      setTimeout(() => {
+        setIsPlaying(false);
+        speak("Graph exploration complete. The trend shows a steady increase.");
+      }, dataPoints.length * 800 + 500);
+    }, 2000);
+  };
+
+  const playGeometryExperience = () => {
+    if (!audioCtxRef.current) return;
+    
+    setIsPlaying(true);
+    speak("Exploring a triangle. Three vertices forming a shape in audio space.");
+
+    setTimeout(() => {
+      const vertices = [
+        { name: 'Top vertex', pan: 0, freq: 600 },
+        { name: 'Bottom-left vertex', pan: -0.7, freq: 300 },
+        { name: 'Bottom-right vertex', pan: 0.7, freq: 300 },
+        { name: 'Back to top', pan: 0, freq: 600 }
+      ];
+
+      vertices.forEach((vertex, index) => {
+        setTimeout(() => {
+          createSpatialTone(vertex.freq, vertex.pan, 0.5, 0.35);
+          setCurrentExperience(vertex.name);
+        }, index * 900);
+      });
+
+      setTimeout(() => {
+        setIsPlaying(false);
+        speak("Triangle complete. You've traced the perimeter.");
+      }, vertices.length * 900 + 500);
+    }, 2000);
+  };
+
+  const playMapExperience = () => {
+    if (!audioCtxRef.current) return;
+    
+    setIsPlaying(true);
+    speak("Exploring a map with three cities positioned around you.");
+
+    setTimeout(() => {
+      const locations = [
+        { name: 'Northern City', pan: 0, freq: 550 },
+        { name: 'Western City', pan: -0.8, freq: 400 },
+        { name: 'Eastern City', pan: 0.8, freq: 400 }
+      ];
+
+      locations.forEach((loc, index) => {
+        setTimeout(() => {
+          createSpatialTone(loc.freq, loc.pan, 0.6, 0.3);
+          speak(loc.name);
+          setCurrentExperience(loc.name);
+        }, index * 1500);
+      });
+
+      setTimeout(() => {
+        setIsPlaying(false);
+        speak("Map exploration complete.");
+      }, locations.length * 1500 + 500);
+    }, 2000);
+  };
+
+  const playMathExperience = () => {
+    if (!audioCtxRef.current) return;
+    
+    setIsPlaying(true);
+    speak("Solving the equation: 2x plus 3 equals 11. Follow along.");
+
+    setTimeout(() => {
+      const steps = [
+        { desc: 'Start: 2x + 3 = 11', freq: 300, pan: 0 },
+        { desc: 'Subtract 3: 2x = 8', freq: 350, pan: -0.3 },
+        { desc: 'Divide by 2: x = 4', freq: 450, pan: 0.3 },
+        { desc: 'Solution: x equals 4', freq: 500, pan: 0 }
+      ];
+
+      steps.forEach((step, index) => {
+        setTimeout(() => {
+          createSpatialTone(step.freq, step.pan, 0.7, 0.3);
+          speak(step.desc);
+          setCurrentExperience(step.desc);
+        }, index * 2500);
+      });
+
+      setTimeout(() => {
+        setIsPlaying(false);
+        speak("Equation solved!");
+      }, steps.length * 2500 + 500);
+    }, 2000);
+  };
+
+  const handleModulePlay = (moduleId) => {
+    setActiveModule(moduleId);
+    
+    switch(moduleId) {
+      case 'graph':
+        playGraphExperience();
+        break;
+      case 'geometry':
+        playGeometryExperience();
+        break;
+      case 'map':
+        playMapExperience();
+        break;
+      case 'math':
+        playMathExperience();
+        break;
+      case 'image':
+      case 'document':
+        speak("Use the upload button to add an image or PDF for analysis.");
+        setCurrentExperience("Ready to process files - click Upload button");
+        break;
+      default:
+        speak("Welcome to the AI Tutor for the Blind. This is a local demonstration that works offline.");
+        setCurrentExperience('🎯 Local Demo Mode - All features work offline!');
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 p-6">
+      <div className="max-w-6xl mx-auto">
+        {/* Header with Demo Badge */}
+        <div className="text-center mb-8">
+          <div className="flex items-center justify-center gap-3 mb-4">
+            <Volume2 className="w-12 h-12 text-cyan-300" />
+            <h1 className="text-4xl font-bold text-white">AI Tutor for the Blind</h1>
+            <span className="bg-green-500 text-white px-3 py-1 rounded-full text-sm font-semibold flex items-center gap-1">
+              <CheckCircle className="w-4 h-4" />
+              LOCAL DEMO
+            </span>
+          </div>
+          <p className="text-xl text-cyan-200 mb-2">Revolutionary Spatial Audio Learning System</p>
+          <p className="text-gray-300 max-w-2xl mx-auto">
+            Offline demo with pre-loaded responses • No internet required • Perfect for presentations
+          </p>
+        </div>
+
+        {/* Voice & Upload Controls */}
+        <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 mb-6 border border-white/20">
+          <div className="flex flex-wrap gap-4 justify-center">
+            <button
+              onClick={isListening ? stopListening : startListening}
+              disabled={isProcessing}
+              className={`flex items-center gap-2 px-6 py-3 rounded-xl font-semibold transition-all ${
+                isListening
+                  ? 'bg-red-500 hover:bg-red-600 text-white animate-pulse'
+                  : 'bg-cyan-500 hover:bg-cyan-600 text-white'
+              } ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              <Mic className="w-5 h-5" />
+              {isListening ? 'Listening...' : 'Ask a Question'}
+            </button>
+
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isProcessing}
+              className={`flex items-center gap-2 px-6 py-3 rounded-xl font-semibold bg-purple-500 hover:bg-purple-600 text-white transition-all ${
+                isProcessing ? 'opacity-50 cursor-not-allowed' : ''
+              }`}
+            >
+              <Upload className="w-5 h-5" />
+              Upload Image/PDF
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*,.pdf"
+              onChange={handleFileUpload}
+              className="hidden"
+            />
+
+            {isProcessing && (
+              <div className="flex items-center gap-2 text-yellow-300">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span>Processing...</span>
+              </div>
+            )}
+          </div>
+          
+          {uploadedFileName && (
+            <div className="mt-3 text-center text-green-300 text-sm">
+              📄 Uploaded: {uploadedFileName}
+            </div>
+          )}
+        </div>
+
+        {/* Current Experience */}
+        <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 mb-6 border border-white/20">
+          <div className="flex items-center gap-3 mb-3">
+            {isPlaying ? (
+              <Pause className="w-6 h-6 text-green-300 animate-pulse" />
+            ) : (
+              <MessageSquare className="w-6 h-6 text-cyan-300" />
+            )}
+            <h2 className="text-xl font-semibold text-white">
+              {isProcessing ? 'Processing...' : isPlaying ? 'Playing Experience' : 'Current Status'}
+            </h2>
+          </div>
+          <p className="text-lg text-gray-200 mb-4 min-h-[40px]">
+            {currentExperience || 'Ready to help you learn - Try voice or upload!'}
+          </p>
+          
+          {aiResponse && (
+            <div className="mt-4 p-4 bg-white/5 rounded-lg border border-cyan-500/30">
+              <p className="text-cyan-100 text-sm leading-relaxed">{aiResponse}</p>
+            </div>
+          )}
+        </div>
+
+        {/* Learning Modules */}
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+          {modules.slice(0, 5).map((module) => {
+            const Icon = module.icon;
+            return (
+              <button
+                key={module.id}
+                onClick={() => handleModulePlay(module.id)}
+                disabled={isPlaying || isProcessing}
+                className={`group bg-white/10 backdrop-blur-lg rounded-xl p-5 border-2 transition-all ${
+                  activeModule === module.id
+                    ? 'border-cyan-400 shadow-lg shadow-cyan-500/50'
+                    : 'border-white/20 hover:border-cyan-300'
+                } ${isPlaying || isProcessing ? 'opacity-50' : 'hover:scale-105'}`}
+              >
+                <div className="flex flex-col items-center text-center">
+                  <Icon className="w-10 h-10 mb-2 text-cyan-300" />
+                  <h3 className="text-lg font-bold text-white mb-1">{module.name}</h3>
+                  <p className="text-gray-300 text-xs">{module.description}</p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Demo Instructions */}
+        <div className="bg-gradient-to-r from-green-500/20 to-cyan-500/20 backdrop-blur-lg rounded-2xl p-6 border border-green-500/30 mb-6">
+          <h2 className="text-xl font-bold text-white mb-4">💡 Demo Tips</h2>
+          <div className="grid md:grid-cols-2 gap-4 text-gray-200 text-sm">
+            <div>
+              <p className="mb-2">🎤 <strong>Try asking:</strong></p>
+              <ul className="ml-4 space-y-1 text-cyan-200">
+                <li>• "Explain photosynthesis"</li>
+                <li>• "Tell me about gravity"</li>
+                <li>• "What is the Pythagorean theorem?"</li>
+                <li>• "Explain the water cycle"</li>
+              </ul>
+            </div>
+            <div>
+              <p className="mb-2">🎧 <strong>Best practices:</strong></p>
+              <ul className="ml-4 space-y-1 text-cyan-200">
+                <li>• Use headphones for spatial audio</li>
+                <li>• Chrome/Edge for voice recognition</li>
+                <li>• Upload any image to see AI analysis</li>
+                <li>• Works completely offline!</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        {/* Chat History */}
+        {chatHistory.length > 0 && (
+          <div className="bg-white/5 backdrop-blur-lg rounded-2xl p-6 border border-white/10">
+            <h2 className="text-xl font-bold text-white mb-4">💬 Conversation History</h2>
+            <div className="space-y-3 max-h-64 overflow-y-auto">
+              {chatHistory.map((msg, idx) => (
+                <div
+                  key={idx}
+                  className={`p-3 rounded-lg ${
+                    msg.role === 'user'
+                      ? 'bg-cyan-500/20 border border-cyan-500/30'
+                      : 'bg-purple-500/20 border border-purple-500/30'
+                  }`}
+                >
+                  <p className="text-sm text-gray-200">{msg.content}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default LocalAITutor;
